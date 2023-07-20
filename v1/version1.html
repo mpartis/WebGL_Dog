@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Βιβλιοθήκες -->
+    <script src="../Libraries/gl-matrix-min.js"></script>
+    <script src="../Libraries/webgl-debug.js"></script>
+
+    <script id="vShader" type="x-shader/x-vertex">
+            attribute vec4 aVertexPosition;
+            attribute vec4 aVertexColor;
+
+            uniform mat4 uTransformMatrix;
+            uniform mat4 uPerspectiveViewTransform;
+            varying vec4 vColor;
+
+            void main()
+            {
+                gl_Position = uPerspectiveViewTransform * uTransformMatrix * aVertexPosition;
+                vColor = aVertexColor;
+            }
+        </script>
+
+        <script id="fShader" type="x-shader/x-fragment">
+            precision mediump float;
+            varying vec4 vColor;
+            void main()
+            {
+                gl_FragColor = vColor;
+            }
+        </script>
+
+        <script>
+            var gl;
+            var canvas;
+            var shaderProgram;
+            var vertexPositionAttributePointer;
+            var vertexColorAttributePointer;
+            var vertexBuffer;
+            var colorBuffer;
+            var verticesTransformUniformPointer;
+            var perspectiveViewUniformPointer;
+            var totalAngle = 0;
+            var viewDistance = 7;
+            var requestId = 0;
+
+            function createGLContext(inCanvas)
+            {
+                var outContext = null;
+
+                outContext = inCanvas.getContext("webgl");
+                if (!outContext)
+                outContext = inCanvas.getContext("experimental-webgl");
+                if (outContext)
+                {
+                    outContext.viewportWidth = inCanvas.width;
+                    outContext.viewportHeight = inCanvas.height;
+                }
+                else
+                {
+                    alert("Failed to create WebGL context!");
+                }
+                return outContext;
+            }
+
+            function createCompileShader(shaderType, shaderSource)
+            {
+                var outShader = gl.createShader(shaderType);
+                gl.shaderSource(outShader, shaderSource);
+                gl.compileShader(outShader);
+
+                if (!gl.getShaderParameter(outShader, gl.COMPILE_STATUS))
+                {
+                    alert("Error compiling shader" + gl.getShaderInfoLog(outShader));
+                    gl.deleteShader(outShader);
+                    return null;
+                }
+                return outShader;
+            }
+
+            function initShaders()
+            {
+                var vertexShaderSource = document.getElementById("vShader").textContent;
+
+                var fragmentShaderSource = document.getElementById("fShader").textContent;
+
+                var vertexShader = createCompileShader(gl.VERTEX_SHADER, vertexShaderSource);
+
+                var fragmentShader = createCompileShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+                shaderProgram = gl.createProgram();
+                gl.attachShader(shaderProgram, vertexShader);
+                gl.attachShader(shaderProgram, fragmentShader);
+                gl.linkProgram(shaderProgram);
+
+                if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
+                {
+                    alert("Failed to setup shaders");
+                }
+
+                gl.useProgram(shaderProgram);
+
+                vertexPositionAttributePointer = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+                gl.enableVertexAttribArray(vertexPositionAttributePointer);
+
+                vertexColorAttributePointer = gl.getAttribLocation(shaderProgram, "aVertexColor");
+                gl.enableVertexAttribArray(vertexColorAttributePointer);
+
+                verticesTransformUniformPointer = gl.getUniformLocation(shaderProgram, "uTransformMatrix");
+                perspectiveViewUniformPointer = gl.getUniformLocation(shaderProgram, "uPerspectiveViewTransform");
+            }
+
+            function initBuffers()
+            {
+                var cubeVertices = new Float32Array ( [
+                    // Front
+                    -1, -1,  1, 1,
+                     1, -1,  1, 1,
+                     1,  1,  1, 1,
+                    -1,  1,  1, 1,
+
+                    // Back
+                    -1, -1, -1, 1,
+                    -1,  1, -1, 1,
+                     1,  1, -1, 1,
+                     1, -1, -1, 1,
+
+                    // Top
+                    -1,  1, -1, 1,
+                    -1,  1,  1, 1,
+                     1,  1,  1, 1,
+                     1,  1, -1, 1,
+
+                    // Bottom
+                    -1, -1, -1, 1,
+                     1, -1, -1, 1,
+                     1, -1,  1, 1,
+                    -1, -1,  1, 1,
+
+                    // Right
+                     1, -1, -1, 1,
+                     1,  1, -1, 1,
+                     1,  1,  1, 1,
+                     1, -1,  1, 1,
+
+                    // Left
+                    -1, -1, -1, 1,
+                    -1, -1,  1, 1,
+                    -1,  1,  1, 1,
+                    -1,  1, -1, 1
+                ]);
+
+                vertexBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+                
+
+                gl.bufferData(gl.ARRAY_BUFFER, cubeVertices,	gl.STATIC_DRAW);
+                vertexBuffer.itemSize = 4;
+                vertexBuffer.numberOfItems = 24;
+
+                colorBuffer=gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+
+                // Χρώματα
+                var colorVertices = [
+                    // Front
+                    0.197, 0.207, 0.820, 1,
+                    0.197, 0.207, 0.820, 1,
+                    0.197, 0.207, 0.820, 1,
+                    0.197, 0.207, 0.820, 1,
+
+                    // Back
+                    0.0255, 0.0942, 0.850, 1,
+                    0.0255, 0.0942, 0.850, 1,
+                    0.0255, 0.0942, 0.850, 1,
+                    0.0255, 0.0942, 0.850, 1,
+
+                    // Top
+                    0.314, 0.425, 0.980, 1,
+                    0.314, 0.425, 0.980, 1,
+                    0.314, 0.425, 0.980, 1,    
+                    0.314, 0.425, 0.980, 1,
+
+                    // Bottom
+                    0.0532, 0.0650, 0.760, 1,
+                    0.0532, 0.0650, 0.760, 1,
+                    0.0532, 0.0650, 0.760, 1,
+                    0.0532, 0.0650, 0.760, 1,
+
+                    // Right
+                    0.0144, 0.0920, 0.480, 1,
+                    0.0144, 0.0920, 0.480, 1,
+                    0.0144, 0.0920, 0.480, 1,
+                    0.0144, 0.0920, 0.480, 1,
+
+                    // Left
+                    0.0710, 0.444, 0.710, 1,
+                    0.0710, 0.444, 0.710, 1,
+                    0.0710, 0.444, 0.710, 1,
+                    0.0710, 0.444, 0.710, 1,
+                ];
+
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colorVertices),	gl.STATIC_DRAW);
+                colorBuffer.itemSize = 4;
+                colorBuffer.numberOfItems = 24;
+
+                indexBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+                var indexMatrix = new Uint16Array([
+                    0, 1, 2,
+                    0, 2, 3,
+
+                    4, 5, 6,
+                    4, 6, 7,
+
+                    8, 9, 10,
+                    8, 10, 11,
+
+                    12, 13, 14,
+                    12, 14, 15,
+
+                    16, 17, 18,
+                    16, 18, 19,
+
+                    20, 21, 22,
+                    20, 22, 23]);
+
+                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexMatrix, gl.STATIC_DRAW);
+                indexBuffer.itemSize = 1;
+                indexBuffer.numberOfItems = 36;
+            }
+
+            function draw()
+            {
+                var x, y, z;
+                
+                var leftFrontTop = document.getElementById("Left-Front-Top");
+                var leftFrontBottom = document.getElementById("Left-Front-Bottom");
+                var leftBackTop = document.getElementById("Left-Back-Top");
+                var leftBackBottom = document.getElementById("Left-Back-Bottom");
+                var rightFrontTop = document.getElementById("Right-Front-Top");
+                var rightFrontBottom = document.getElementById("Right-Front-Bottom");
+                var rightBackTop = document.getElementById("Right-Back-Top");
+                var RightBackBottom = document.getElementById("Right-Back-Bottom");
+
+                var localViewAngle = parseFloat(document.getElementById("viewAngleText").value);
+                var localDistance = parseFloat(document.getElementById("ZText").value);
+
+                var perspectiveMatrix = new Float32Array(16); // Πίνακα προοπτικής
+                var viewMatrix = new Float32Array(16); // Πίνακας τοποθέτησης της κάμερας
+                var pvMatrix= new Float32Array(16); // Αποτέλεσμα του γινομένου των δυο προηγούμενων γινόμενων
+
+                // Εκτέλεση της επιλεγμένης λειτουργίας
+
+                if (leftFrontTop.checked) {
+                    x = -viewDistance;
+                    y = viewDistance;
+                    z = viewDistance;
+                }
+                else if (leftFrontBottom.checked) {
+                    x = -viewDistance;
+                    y = viewDistance;
+                    z = -viewDistance;
+                }
+                else if (leftBackTop.checked) {
+                    x = -viewDistance;
+                    y = -viewDistance;
+                    z = viewDistance;
+                }
+                else if (leftBackBottom.checked) {
+                    x = -viewDistance;
+                    y = -viewDistance;
+                    z = -viewDistance;
+                }
+                else if (rightFrontTop.checked) {
+                    x = viewDistance;
+                    y = viewDistance;
+                    z = viewDistance;
+                }
+                else if (rightFrontBottom.checked) {
+                    x = viewDistance;
+                    y = viewDistance;
+                    z = -viewDistance;
+                }
+                else if (rightBackTop.checked) {
+                    x = viewDistance;
+                    y = -viewDistance;
+                    z = viewDistance;
+                }
+                else if (RightBackBottom.checked) {
+                    x = viewDistance;
+                    y = -viewDistance;
+                    z = -viewDistance;
+                }
+                else {
+                    x = 7;
+                    y = 7;
+                    z = 7;
+                }
+                
+                totalAngle = (localViewAngle%360) * Math.PI/180.0;
+                glMatrix.mat4.perspective(perspectiveMatrix, totalAngle, 1, 0.001, viewDistance * 10); // ?
+
+                glMatrix.mat4.lookAt(viewMatrix, [x, y, z], [0, 0, 0], [0, 0, 1]);
+
+
+                glMatrix.mat4.multiply(pvMatrix,perspectiveMatrix,viewMatrix);
+
+                gl.uniformMatrix4fv(perspectiveViewUniformPointer, false, new Float32Array(pvMatrix));
+
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+                gl.vertexAttribPointer(vertexPositionAttributePointer, vertexBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+                gl.vertexAttribPointer(vertexColorAttributePointer, colorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+
+
+                var p=0;
+                {
+                    var translationMatrix = new Float32Array(16);
+                    glMatrix.mat4.fromTranslation(translationMatrix, [p, p, 0]);
+                    gl.uniformMatrix4fv(verticesTransformUniformPointer, false, translationMatrix);
+                    gl.drawElements(gl.TRIANGLES, indexBuffer.numberOfItems, gl.UNSIGNED_SHORT, 0);
+                }
+            }
+            
+
+            function main()
+            {
+                canvas = document.getElementById("sceneCanvas");
+                var minDimension = Math.min(window.innerWidth, window.innerHeight);
+                canvas.width = 0.9 * minDimension;
+                canvas.height = 0.9 * minDimension;
+                gl = WebGLDebugUtils.makeDebugContext(createGLContext(canvas));
+                initShaders();
+                initBuffers();
+                gl.clearColor(0.550, 0.545, 0.545, 1.0); // background color
+
+                gl.enable(gl.DEPTH_TEST);
+                gl.viewport(7, 7, gl.viewportWidth, gl.viewportHeight);
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+                draw();
+            }
+
+        </script>
+
+    <title>Version 1</title>
+</head>
+<body onload="main()">
+    <div>
+        <div>
+            <canvas id="sceneCanvas" >
+            </canvas>
+        </div>
+    </div>
+
+    <div>
+        <p>
+            View Angle: <label for="viewAngleText"></label><input type="text" id="viewAngleText" min="0" value="90">
+        </p>
+        <p>
+            Camera Distance: <label for="ZText"></label><input type="text" id="ZText" value="0.001"> 
+        </p>
+        <p>
+            Left-Front-Top:<label for="Left-Front-Top"></label><input type="radio" name="test" value="1" id="Left-Front-Top" checked/>
+            <br>
+            Left-Front-Bottom:<label for="Left-Front-Bottom"></label><input type="radio" name="test" value="2" id="Left-Front-Bottom"/>
+            <br>
+        
+            Left-Back-Top:<label for="Left-Back-Top"></label><input type="radio" name="test" value="3" id="Left-Back-Top"/>
+            <br>
+            Left-Back-Bottom:<label for="Left-Back-Bottom"></label><input type="radio" name="test" value="4" id="Left-Back-Bottom"/>
+            <br>
+        
+            Right-Front-Top:<label for="Right-Front-Top"></label><input type="radio" name="test" value="5" id="Right-Front-Top"/>
+            <br>
+            Right-Front-Bottom:<label for="Right-Front-Bottom"></label><input type="radio" name="test" value="6" id="Right-Front-Bottom"/>
+            <br>
+            Right-Back-Top:<label for="Right-Back-Top"></label><input type="radio" name="test" value="6" id="Right-Back-Top"/>
+            <br>
+            Right-Back-Bottom:<label for="Right-Back-Bottom"></label><input type="radio" name="test" value="6" id="Right-Back-Bottom"/>
+            <br>
+        </p>
+
+        <p>
+            <button onClick=draw()>Draw</button>
+        </p>
+    </div>
+</body>
+</html>
